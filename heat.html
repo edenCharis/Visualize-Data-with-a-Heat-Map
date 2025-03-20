@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Global Temperature Heatmap with Tooltip</title>
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <style>
+    .axis-label {
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .title {
+      text-anchor: middle;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .tooltip {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <svg id="heatmap" width="1200" height="500"></svg>
+  <div id="tooltip" class="tooltip" style="display: none;"></div>
+
+  <script>
+    const url = "https://raw.githubusercontent.com/freeCodeCamp/ProjectReferenceData/master/global-temperature.json";
+    const width = 1200;
+    const height = 500;
+    const margin = { top: 100, right: 20, bottom: 100, left: 100 };
+
+    const svg = d3.select("#heatmap")
+                  .attr("width", width)
+                  .attr("height", height);
+
+    const tooltip = d3.select("#tooltip");
+
+    // Load the data
+    d3.json(url).then(data => {
+      const baseTemp = data.baseTemperature;
+      const monthlyData = data.monthlyVariance;
+
+      // Scales
+      const xScale = d3.scaleBand()
+                       .domain(monthlyData.map(d => d.year))
+                       .range([margin.left, width - margin.right])
+                       .padding(0.01);
+
+      const yScale = d3.scaleBand()
+                       .domain(d3.range(1, 13))
+                       .range([margin.top, height - margin.bottom])
+                       .padding(0.01);
+
+      const tempExtent = d3.extent(monthlyData, d => baseTemp + d.variance);
+      const colorScale = d3.scaleSequential(d3.interpolateRdYlBu)
+                           .domain([tempExtent[1], tempExtent[0]]);
+
+      // Axes
+      const xAxis = d3.axisBottom(xScale)
+                      .tickValues(xScale.domain().filter((d, i) => i % 10 === 0));
+      const yAxis = d3.axisLeft(yScale)
+                      .tickFormat(month => d3.timeFormat("%B")(new Date(2000, month - 1, 1)));
+
+      svg.append("g")
+         .attr("transform", `translate(0, ${height - margin.bottom})`)
+         .call(xAxis)
+         .attr("class", "axis-label");
+
+      svg.append("g")
+         .attr("transform", `translate(${margin.left}, 0)`)
+         .call(yAxis)
+         .attr("class", "axis-label");
+
+      // Draw heatmap
+      svg.selectAll(".cell")
+         .data(monthlyData)
+         .enter()
+         .append("rect")
+         .attr("class", "cell")
+         .attr("x", d => xScale(d.year))
+         .attr("y", d => yScale(d.month))
+         .attr("width", xScale.bandwidth())
+         .attr("height", yScale.bandwidth())
+         .attr("fill", d => colorScale(baseTemp + d.variance))
+         .on("mouseover", (event, d) => {
+           tooltip.style("display", "block")
+                  .html(
+                    `<strong>Year:</strong> ${d.year}<br>
+                     <strong>Month:</strong> ${d3.timeFormat("%B")(new Date(2000, d.month - 1, 1))}<br>
+                     <strong>Temperature:</strong> ${(baseTemp + d.variance).toFixed(2)}°C<br>
+                     <strong>Variance:</strong> ${d.variance.toFixed(2)}°C`
+                  )
+                  .style("left", `${event.pageX + 10}px`)
+                  .style("top", `${event.pageY - 20}px`);
+         })
+         .on("mousemove", event => {
+           tooltip.style("left", `${event.pageX + 10}px`)
+                  .style("top", `${event.pageY - 20}px`);
+         })
+         .on("mouseout", () => {
+           tooltip.style("display", "none");
+         });
+
+      // Title
+      svg.append("text")
+         .attr("class", "title")
+         .attr("x", width / 2)
+         .attr("y", margin.top / 2)
+         .text("Monthly Global Land-Surface Temperature");
+
+      // Legend
+      const legendWidth = 300;
+      const legendHeight = 20;
+
+      const legendScale = d3.scaleLinear()
+                            .domain(tempExtent)
+                            .range([0, legendWidth]);
+
+      const legendAxis = d3.axisBottom(legendScale)
+                           .ticks(10)
+                           .tickFormat(d3.format(".1f"));
+
+      const legend = svg.append("g")
+                        .attr("transform", `translate(${(width - legendWidth) / 2}, ${height - margin.bottom + 40})`);
+
+      legend.append("defs")
+            .append("linearGradient")
+            .attr("id", "legend-gradient")
+            .selectAll("stop")
+            .data(colorScale.ticks().map((t, i, n) => ({
+              offset: `${(100 * i) / (n.length - 1)}%`,
+              color: colorScale(t)
+            })))
+            .enter()
+            .append("stop")
+            .attr("offset", d => d.offset)
+            .attr("stop-color", d => d.color);
+
+      legend.append("rect")
+            .attr("x", 0)
+            .attr("y", 0)
+            .attr("width", legendWidth)
+            .attr("height", legendHeight)
+            .style("fill", "url(#legend-gradient)");
+
+      legend.append("g")
+            .attr("transform", `translate(0, ${legendHeight})`)
+            .call(legendAxis);
+    });
+  </script>
+</body>
+</html>
